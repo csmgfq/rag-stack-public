@@ -9,3 +9,7 @@ logs/
 
 # Keep directory structure if needed
 !.gitkeep
+
+# Python cache
+__pycache__/
+*.pyc
