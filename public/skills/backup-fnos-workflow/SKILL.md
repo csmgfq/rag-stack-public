@@ -13,6 +13,15 @@ This skill standardizes direct remote-to-remote backups to FNOS without local st
 - You need to back up container artifacts from `/root/backups/<tag>` via `-p 50001`.
 - You want one command that discovers latest backup tags, transfers to FNOS, and verifies checksums.
 
+## Backup Trigger Policy
+- Minor changes: do not run backup workflow.
+- Major changes: run this workflow before/after release as needed.
+
+Major changes include:
+- Feature-level updates or large refactors.
+- Port-forwarding/routing strategy changes.
+- Index/cache/runtime schema-level configuration changes.
+
 ## Workflow
 1. Confirm network reachability to FNOS (`admin@100.109.127.77`) and source hosts.
 2. Run `scripts/run_backup_to_fnos.sh` in `--dry-run` mode first.
