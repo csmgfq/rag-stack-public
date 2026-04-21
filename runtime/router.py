@@ -29,28 +29,53 @@ def _get_json(url: str, timeout: int = 30) -> dict[str, Any]:
         return json.load(resp)
 
 
+def _safe_get_json(url: str, timeout: int = 3) -> dict[str, Any] | None:
+    try:
+        return _get_json(url, timeout=timeout)
+    except Exception:
+        return None
+
+
 def create_app() -> FastAPI:
     cfg = RuntimeConfig.from_env()
     cache = choose_cache(cfg.redis_url)
-    app = FastAPI(title="RAG Runtime Router", version="0.1.0")
+    app = FastAPI(title="RAG Runtime Router", version="0.2.0")
 
     @app.get("/health")
     def health() -> dict[str, Any]:
         return {
             "status": "ok",
             "lmstudio_base_url": cfg.lmstudio_base_url,
+            "vllm_base_url": cfg.vllm_base_url,
+            "react_base_url": cfg.react_base_url,
             "cache_backend": cache.version(),
             "prompt_version": cfg.prompt_version,
             "retrieval_version": cfg.retrieval_version,
             "profiles": list(cfg.profiles.keys()),
+            "supported_routes": ["lmstudio", "vllm", "react"],
         }
 
     @app.get("/v1/models")
     def list_models() -> dict[str, Any]:
-        upstream = _get_json(f"{cfg.lmstudio_base_url}/models")
         aliases = [{"id": k, "object": "model", "owned_by": "rag-router"} for k in cfg.profiles]
-        data = upstream.get("data", []) if isinstance(upstream, dict) else []
-        return {"object": "list", "data": aliases + data}
+        aliases.extend(
+            [
+                {"id": "route:vllm", "object": "model", "owned_by": "rag-router"},
+                {"id": "route:react", "object": "model", "owned_by": "rag-router"},
+            ]
+        )
+
+        upstream: list[dict[str, Any]] = []
+        for base in [cfg.lmstudio_base_url, cfg.vllm_base_url, cfg.react_base_url]:
+            if not base:
+                continue
+            data = _safe_get_json(f"{base}/models")
+            if isinstance(data, dict) and isinstance(data.get("data"), list):
+                for item in data["data"]:
+                    if isinstance(item, dict):
+                        upstream.append(item)
+
+        return {"object": "list", "data": aliases + upstream}
 
     @app.post("/admin/cache/invalidate")
     async def invalidate_cache(req: Request) -> dict[str, Any]:
@@ -73,11 +98,25 @@ def create_app() -> FastAPI:
         metadata = payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {}
         if not route_hint:
             route_hint = metadata.get("route_profile")
+        if not route_hint:
+            route_hint = metadata.get("route")
 
-        profile = cfg.resolve_alias(str(route_hint)) if route_hint else cfg.resolve_request_model(payload.get("model"))
+        try:
+            backend, base_url = cfg.upstream_for_route(str(route_hint) if route_hint else None)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+        profile = cfg.resolve_alias(str(route_hint)) if route_hint in cfg.profiles else cfg.resolve_request_model(payload.get("model"))
 
         lm_payload = dict(payload)
-        lm_payload["model"] = profile.model_id
+        lm_payload.pop("route", None)
+        if isinstance(lm_payload.get("metadata"), dict):
+            lm_payload["metadata"] = dict(lm_payload["metadata"])
+            lm_payload["metadata"].pop("route", None)
+            lm_payload["metadata"].pop("route_profile", None)
+
+        if backend != "react":
+            lm_payload["model"] = profile.model_id
         if "max_tokens" not in lm_payload:
             lm_payload["max_tokens"] = profile.max_tokens
 
@@ -92,7 +131,7 @@ def create_app() -> FastAPI:
         stream = bool(payload.get("stream", False))
 
         key = build_exact_cache_key(
-            model_alias=profile.alias,
+            model_alias=f"{backend}:{profile.alias}",
             prompt_version=prompt_version,
             retrieval_version=retrieval_version,
             top_k=top_k,
@@ -108,7 +147,7 @@ def create_app() -> FastAPI:
                 return JSONResponse(cached)
 
         try:
-            result = _post_json(f"{cfg.lmstudio_base_url}/chat/completions", lm_payload)
+            result = _post_json(f"{base_url}/chat/completions", lm_payload)
         except urlerror.HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="ignore")
             raise HTTPException(status_code=exc.code, detail=detail)
@@ -116,6 +155,8 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=502, detail=f"upstream request failed: {exc}")
 
         result["route"] = {
+            "backend": backend,
+            "base_url": base_url,
             "alias": profile.alias,
             "model_id": profile.model_id,
             "context_length": profile.context_length,

@@ -16,5 +16,13 @@ monitoring/nosudo/data/benchmark_metrics.json
 *.pid
 *.db
 
+# Local env overrides
+scripts/runtime_env.sh
+
+# KB local/raw/generated artifacts (do not commit source/snapshots)
+kb/raw/
+kb/processed/*.json
+kb/processed/*.jsonl
+
 # OS/editor
 .DS_Store

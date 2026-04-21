@@ -2,218 +2,166 @@
 
 RAG 基础设施第二版汇总仓库（单仓入口，Transit-first 运行）。
 
-这个仓库把三件事情统一在一起：
-- Runtime：LM Studio 单卡路由、模型配置、轻量压测。
-- Monitoring：Prometheus/Grafana/exporter 监看链路。
-- Transit 控制面：Tailscale 转发与 OpenAPI（`/status`、`/apply`）。
+本仓库统一三条链路：
+- Runtime：LM Studio 路由与缓存（默认主链路）
+- vLLM：并行后端（灰度接入，不替换现网）
+- ReAct Agent：OpenAI 兼容入口，内部调用检索 + 推理
 
-当前默认策略是 **中转优先（Transit-first）**：
-- 保持你现在已经跑着的主链路为主，不强制推翻成全容器。
-- Docker/50001 容器主要作为中转与控制面入口。
+## 1. 当前策略
 
-## 1. 仓库结构
+- 默认保持现网链路：`LM Studio + monitoring + tailscale proxy`
+- 新能力采用并行接入：`vLLM` 与 `ReAct` 都通过显式 route 触发
+- 运维入口统一走 `scripts/stack_*.sh`
+
+## 2. 仓库结构
 
 ```text
 rag-stack-public/
 ├── README.md
 ├── benchmark_lmstudio.py
-├── docker-compose.yml                    # 预留：未来全容器化
-├── runtime/                              # 路由与模型 profile
-├── monitoring/                           # Prometheus/Grafana/exporters 配置
-├── tailscale-forwarding/                 # 转发控制面与隧道脚本
+├── runtime/                              # runtime router + launcher
+├── react_agent/                          # ReAct OpenAI-compatible service
 ├── scripts/
-│   ├── stack_up.sh
-│   ├── stack_down.sh
-│   ├── stack_status.sh
-│   ├── stack_healthcheck.sh
-│   ├── stack_verify_openapi.sh
+│   ├── clean_data.sh                     # 阶段0：清洗语料 -> JSONL
+│   ├── build_index.sh                    # 阶段0：构建简易检索索引
+│   ├── vllm_smoke.sh                     # 阶段A：vLLM 冒烟
+│   ├── react_smoke.sh                    # 阶段B：ReAct 冒烟
+│   ├── rollback_check.sh                 # 回滚安全检查
+│   ├── stack_up.sh / stack_status.sh / stack_healthcheck.sh / stack_verify_openapi.sh
 │   ├── start_single_gpu_runtime.sh
-│   └── runtime_env.example
+│   └── start_react_agent.sh
+├── kb/processed/                         # 清洗 JSONL 与索引输出
 ├── docs/
-├── ops/
-├── public/                               # 对外上传目录（仅分发内容）
-└── skills/
-    └── rag-stack-ops/
-        └── SKILL.md                      # Codex 运维技能模板
+│   └── kb_cleaning_preview.md            # raw -> cleaned 示例
+├── skills/
+│   └── rag-stack-ops/SKILL.md
+└── public/                               # 对外上传目录（仅分发内容）
 ```
 
-## 2. 执行入口（本地 + 远端）
+## 3. 环境与入口
 
-### 2.1 推荐入口
-
-- 容器内主入口（当前可操作环境）：`/workspace/rag-stack-public`
-- 登录方式（已配置 key 时）：
-
+容器入口：
 ```bash
 ssh -p 50001 root@3090-6.grifcc.top
 cd /workspace/rag-stack-public
 ```
 
-### 2.2 历史目录关系
-
-- 当前汇总仓：`/workspace/rag-stack-public`
-- 历史运行链路仍在：`/workspace/llm/rag`（由 `stack_*.sh` 按需调用）
-- 原则：历史目录保留可回滚能力，但日常运维统一走本仓脚本。
-
-## 3. 快速开始（建议照这个顺序）
-
-### 3.1 启动
-
+建议先准备环境变量：
 ```bash
-cd /workspace/rag-stack-public
+cp scripts/runtime_env.example scripts/runtime_env.sh
+source scripts/runtime_env.sh
+```
+
+## 4. 阶段0：数据清洗与样例化（JSONL）
+
+输入（默认）：
+- `KB_CHAT_EXPORT=/Volumes/192.168.31.34/app/Windows/chat-export-1776788331981.json`
+- `KB_MARKDOWN_FILE=/Volumes/192.168.31.34/rag-fnos/source/鱼皮 rag 概念技术解答.md`
+
+执行：
+```bash
+bash scripts/clean_data.sh
+bash scripts/build_index.sh
+```
+
+输出：
+- `kb/processed/cleaned_kb.jsonl`
+- `kb/processed/simple_index.json`
+- `docs/kb_cleaning_preview.md`
+
+JSONL 字段契约：
+- `doc_id`
+- `source_path`
+- `source_type`
+- `title`
+- `chunk_id`
+- `text`
+- `tags`
+- `created_at`
+
+清洗规则：
+- 聊天导出：提取用户问题/结论/约束，去空消息、去系统噪声、脱敏（IP/口令/token/账号）
+- Markdown 技术文：去图片与 data-uri，按标题切块并保留 tags（`rag_basics`、`rag_variant`、`agentic`）
+
+## 5. 阶段A：vLLM 并行接入（不替换）
+
+先跑现网基线：
+```bash
 bash scripts/stack_up.sh
-```
-
-行为说明：
-- 脚本会尝试调用历史监看启动脚本（若存在）。
-- 默认不做破坏性停服动作。
-
-### 3.2 看状态
-
-```bash
 bash scripts/stack_status.sh
+bash scripts/stack_healthcheck.sh
+bash scripts/stack_verify_openapi.sh
 ```
 
-会检查：
-- 监看关键进程。
-- 主机端口：`19090`、`13000`、`9401`。
-- Transit OpenAPI 的 `/status`。
+再跑 vLLM 冒烟：
+```bash
+bash scripts/vllm_smoke.sh
+```
 
-### 3.3 健康检查（验收必跑）
+Runtime 路由约定：
+- 默认：LM Studio
+- 显式 `route=vllm`：走 `VLLM_BASE_URL`
+- 显式 `route=react`：走 `REACT_BASE_URL`
+
+## 6. 阶段B：ReAct 接入（OpenAI 兼容）
+
+启动 ReAct：
+```bash
+bash scripts/start_react_agent.sh
+```
+
+冒烟：
+```bash
+bash scripts/react_smoke.sh
+```
+
+ReAct 对外契约：
+- `GET /v1/models`
+- `POST /v1/chat/completions`
+- `GET /health`
+- `POST /admin/reload`（重新加载索引）
+
+## 7. 全流程验收顺序
 
 ```bash
+bash scripts/clean_data.sh
+bash scripts/build_index.sh
+bash scripts/stack_up.sh
+bash scripts/stack_status.sh
 bash scripts/stack_healthcheck.sh
+bash scripts/stack_verify_openapi.sh
+bash scripts/vllm_smoke.sh
+bash scripts/react_smoke.sh
+bash scripts/rollback_check.sh
 ```
 
-检查项：
-- `http://127.0.0.1:19090/-/healthy`
-- `http://127.0.0.1:13000/api/health`
-- `http://127.0.0.1:9401/metrics`
-- OpenAPI 合规：`/status`、`/apply`、`/api/v1/status`、`/api/v1/apply`
+## 8. 回滚与安全
 
-### 3.4 停止（安全默认）
-
+安全默认停机：
 ```bash
 bash scripts/stack_down.sh
 ```
 
-默认不会停止历史服务；确需停机时：
-
+强制停历史链路：
 ```bash
 bash scripts/stack_down.sh --force-stop-legacy
 ```
 
-## 4. Runtime（单卡）
-
-你已经将多卡问题收敛到单卡运行，本仓沿用该策略。
-
-### 4.1 准备环境变量
-
+回滚检查：
 ```bash
-cp scripts/runtime_env.example scripts/runtime_env.sh
-# 根据真实路径修改 runtime_env.sh
-source scripts/runtime_env.sh
+bash scripts/rollback_check.sh
 ```
 
-关键变量：
-- `LMSTUDIO_BASE_URL`：默认 `http://127.0.0.1:1234/v1`
-- `RAG_GPU_BINDING`：默认 `0`
-- `RAG_ROUTER_PORT`：默认 `18000`
+## 9. 兼容性要求（必须保持）
 
-### 4.2 启动 runtime
+tailscale-proxy OpenAPI 保持不变：
+- `/status`
+- `/apply`
+- `/api/v1/status`
+- `/api/v1/apply`
 
-```bash
-bash scripts/start_single_gpu_runtime.sh
-```
+## 10. 敏感信息原则
 
-说明：
-- 脚本会优先使用 `.venv-runtime`。
-- 自动安装 `runtime/requirements.txt`。
-- 启动 `runtime.launcher` + `uvicorn runtime.router:app`。
-
-## 5. 轻量压测（只做可跑通验证）
-
-```bash
-cd /workspace/rag-stack-public
-LMSTUDIO_BASE_URL=http://127.0.0.1:1234/v1 \
-LMSTUDIO_MODELS=google/gemma-4-e4b \
-BENCH_SHORT_REQUESTS=2 \
-BENCH_SHORT_CONCURRENCY=1 \
-BENCH_LONG_REQUESTS=2 \
-BENCH_LONG_CONCURRENCY=1 \
-BENCH_LONG_CONTEXT_CHARS=6000 \
-BENCH_SHORT_MAX_TOKENS=128 \
-BENCH_LONG_MAX_TOKENS=128 \
-BENCH_RETRIES=1 \
-python3 benchmark_lmstudio.py
-```
-
-输出：
-- `benchmark_report.json`
-- `benchmark_report.md`
-
-## 6. OpenAPI 协议约定（必须保持兼容）
-
-当前控制面必须兼容这些路径：
-- `GET /status`
-- `POST /apply`
-- `GET /api/v1/status`
-- `POST /api/v1/apply`
-
-单独验证：
-
-```bash
-bash scripts/stack_verify_openapi.sh
-```
-
-## 7. `public/` 上传规范
-
-`public/` 目录仅用于远端上传分发，不等于运行目录。
-
-必须遵守：
-- 允许：脚本、配置模板、文档。
-- 禁止：日志、缓存、数据库、PID、私钥、密码、Token。
-- 禁止提交任何本地临时产物。
-
-## 8. Skill 使用（防遗忘）
-
-本仓提供运维 skill：`skills/rag-stack-ops/SKILL.md`。
-
-用途：
-- 每次变更前后，按固定流程执行 `up -> status -> healthcheck -> openapi -> light benchmark`。
-- 防止只改代码、不跑全流程。
-
-建议：
-- 将该 skill 同步到本机 `$CODEX_HOME/skills/rag-stack-ops/` 后，在 Codex 中可直接触发。
-
-## 9. 常见故障
-
-### 9.1 `stack_healthcheck.sh` 失败
-
-先跑：
-
-```bash
-bash scripts/stack_status.sh
-```
-
-判断是端口未起还是 OpenAPI 返回异常，再处理。
-
-### 9.2 `stack_verify_openapi.sh` 报缺少路径
-
-说明控制面接口回归不兼容，必须先修复接口再上线。
-
-### 9.3 压测失败但服务可访问
-
-优先降低参数（并发/上下文/token），确认可跑通后再逐步加压。
-
-## 10. 安全原则
-
-- 文档中的账号/口令只能作占位示例，不得写入真实值。
-- 所有敏感信息必须走环境变量或外部密管。
-- 每次凭据暴露后都应立即轮换（特别是 PAT/SSH 密钥）。
-
-## 11. 后续路线（你已规划）
-
-- 保持当前 Transit-first 基线稳定。
-- 后续引入 vLLM 架构并接 LMS。
-- 持续沿用这套脚本与 OpenAPI 验收契约，避免迁移回归。
+- 仓库禁止提交口令、token、私钥、内网凭据
+- `public/` 仅保留可分发内容，不包含本地运行态文件
+- 第三方语料仅用于内部检索与示例，不外发原文

@@ -1,7 +1,9 @@
 # Copy to scripts/runtime_env.sh and source it before starting runtime.
 
-export LMSTUDIO_BASE_URL="http://127.0.0.1:1234/v1"
-export RAG_MODEL_PROFILE_PATH="/home/jiangzhiming/workspace/rag-stack/runtime/model_profiles.json"
+export LMSTUDIO_BASE_URL="http://100.66.142.110:1234/v1"
+export VLLM_BASE_URL="http://127.0.0.1:8000/v1"
+export REACT_BASE_URL="http://127.0.0.1:18001/v1"
+export RAG_MODEL_PROFILE_PATH="/workspace/rag-stack-public/runtime/model_profiles.json"
 
 # Fixed single-GPU binding. Change to another card index when needed.
 export RAG_GPU_BINDING="0"
@@ -16,3 +18,12 @@ export RAG_RETRIEVAL_VERSION="v1"
 # Runtime router bind
 export RAG_ROUTER_HOST="0.0.0.0"
 export RAG_ROUTER_PORT="18000"
+
+# ReAct agent bind
+export REACT_AGENT_HOST="0.0.0.0"
+export REACT_AGENT_PORT="18001"
+export RAG_KB_INDEX_PATH="/workspace/rag-stack-public/kb/processed/simple_index.json"
+
+# Source files for cleaning (can be overridden)
+export KB_CHAT_EXPORT="/workspace/rag-stack-public/kb/raw/chat-export-1776788331981.json"
+export KB_MARKDOWN_FILE="/workspace/rag-stack-public/kb/raw/鱼皮-rag-概念技术解答.md"

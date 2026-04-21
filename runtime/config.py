@@ -22,6 +22,8 @@ class RuntimeConfig:
         self,
         *,
         lmstudio_base_url: str,
+        vllm_base_url: str | None,
+        react_base_url: str | None,
         profile_path: Path,
         prompt_version: str,
         retrieval_version: str,
@@ -30,6 +32,8 @@ class RuntimeConfig:
         allow_raw_model_id: bool,
     ) -> None:
         self.lmstudio_base_url = lmstudio_base_url.rstrip("/")
+        self.vllm_base_url = vllm_base_url.rstrip("/") if vllm_base_url else None
+        self.react_base_url = react_base_url.rstrip("/") if react_base_url else None
         self.profile_path = profile_path
         self.prompt_version = prompt_version
         self.retrieval_version = retrieval_version
@@ -48,6 +52,8 @@ class RuntimeConfig:
         profile_path = Path(os.environ.get("RAG_MODEL_PROFILE_PATH", "runtime/model_profiles.json"))
         return cls(
             lmstudio_base_url=os.environ.get("LMSTUDIO_BASE_URL", "http://127.0.0.1:1234/v1"),
+            vllm_base_url=os.environ.get("VLLM_BASE_URL", "http://127.0.0.1:8000/v1"),
+            react_base_url=os.environ.get("REACT_BASE_URL", "http://127.0.0.1:18001/v1"),
             profile_path=profile_path,
             prompt_version=os.environ.get("RAG_PROMPT_VERSION", "v1"),
             retrieval_version=os.environ.get("RAG_RETRIEVAL_VERSION", "v1"),
@@ -102,3 +108,15 @@ class RuntimeConfig:
                 max_tokens=base.max_tokens,
             )
         return self.profiles["rag-main"]
+
+    def upstream_for_route(self, route: str | None) -> tuple[str, str]:
+        key = (route or "").strip().lower()
+        if key == "react":
+            if not self.react_base_url:
+                raise ValueError("react route requested but REACT_BASE_URL is empty")
+            return ("react", self.react_base_url)
+        if key == "vllm":
+            if not self.vllm_base_url:
+                raise ValueError("vllm route requested but VLLM_BASE_URL is empty")
+            return ("vllm", self.vllm_base_url)
+        return ("lmstudio", self.lmstudio_base_url)
