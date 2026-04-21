@@ -1,0 +1,95 @@
+services:
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: rag-prometheus
+    restart: unless-stopped
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+
+  grafana:
+    image: grafana/grafana:11.2.2
+    container_name: rag-grafana
+    restart: unless-stopped
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin123
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - ./monitoring/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./monitoring/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+
+  node-exporter:
+    image: prom/node-exporter:v1.8.2
+    container_name: rag-node-exporter
+    restart: unless-stopped
+    command:
+      - --path.rootfs=/host
+      - --collector.textfile.directory=/host/var/lib/node_exporter/textfile_collector
+    pid: host
+    volumes:
+      - /:/host:ro,rslave
+    ports:
+      - "9100:9100"
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    container_name: rag-cadvisor
+    restart: unless-stopped
+    privileged: true
+    devices:
+      - /dev/kmsg:/dev/kmsg
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:rw
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+    ports:
+      - "8080:8080"
+
+  process-exporter:
+    image: ncabatoff/process-exporter:v0.8.4
+    container_name: rag-process-exporter
+    restart: unless-stopped
+    pid: host
+    command:
+      - --procfs=/host/proc
+      - --config.path=/config/process-exporter.yml
+    volumes:
+      - /proc:/host/proc:ro
+      - ./monitoring/process-exporter.yml:/config/process-exporter.yml:ro
+    ports:
+      - "9256:9256"
+
+  dcgm-exporter:
+    image: nvcr.io/nvidia/k8s/dcgm-exporter:3.3.9-3.6.1-ubuntu22.04
+    container_name: rag-dcgm-exporter
+    restart: unless-stopped
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=utility,compute
+    ports:
+      - "9400:9400"
+
+  qdrant:
+    image: qdrant/qdrant:v1.13.6
+    container_name: rag-qdrant
+    restart: unless-stopped
+    profiles: ["qdrant"]
+    volumes:
+      - ./qdrant/config.yaml:/qdrant/config/production.yaml:ro
+      - ./data/qdrant:/qdrant/storage
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+
+volumes:
+  grafana_data:

@@ -1,4 +1,0 @@
-interface:
-  display_name: "FNOS Backup Workflow"
-  short_description: "Direct FNOS backup and checksum verification"
-  default_prompt: "Run direct host/container backup to FNOS over Tailscale and verify checksums."

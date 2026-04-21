@@ -1,0 +1,82 @@
+{
+  "id": null,
+  "uid": "rag-overview",
+  "title": "RAG Server Overview",
+  "tags": ["rag", "gpu", "lmstudio"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "10s",
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "CPU Usage %",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "targets": [
+        {
+          "expr": "100 - (avg by(instance) (rate(node_cpu_seconds_total{mode=\"idle\"}[2m])) * 100)",
+          "legendFormat": "{{instance}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Memory Usage %",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "targets": [
+        {
+          "expr": "(1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100",
+          "legendFormat": "{{instance}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "GPU Utilization %",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+      "targets": [
+        {
+          "expr": "DCGM_FI_DEV_GPU_UTIL",
+          "legendFormat": "GPU {{gpu}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "GPU Memory Used (MiB)",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+      "targets": [
+        {
+          "expr": "DCGM_FI_DEV_FB_USED",
+          "legendFormat": "GPU {{gpu}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "llmster Process Count",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+      "targets": [
+        {
+          "expr": "namedprocess_namegroup_num_procs{groupname=\"llmster\"}",
+          "legendFormat": "llmster"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Network Receive (MB/s)",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+      "targets": [
+        {
+          "expr": "sum by(instance) (rate(node_network_receive_bytes_total{device!~\"lo\"}[2m])) / 1024 / 1024",
+          "legendFormat": "{{instance}}"
+        }
+      ]
+    }
+  ],
+  "templating": {"list": []},
+  "time": {"from": "now-1h", "to": "now"},
+  "timepicker": {},
+  "annotations": {"list": []}
+}

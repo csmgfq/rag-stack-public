@@ -1,15 +1,20 @@
+# Runtime artifacts
 bin/
 data/
 logs/
+legacy_snapshots/
+.venv*
+__pycache__/
+*.pyc
 
-# Runtime-generated files
-*.log
+# Benchmark outputs
+benchmark_report.json
+benchmark_report.md
+monitoring/nosudo/data/benchmark_metrics.json
+
+# PIDs and DB
 *.pid
 *.db
 
-# Keep directory structure if needed
-!.gitkeep
-
-# Python cache
-__pycache__/
-*.pyc
+# OS/editor
+.DS_Store

@@ -1,0 +1,16 @@
+process_names:
+  - name: "llmster"
+    cmdline:
+      - '.*llmster.*'
+
+  - name: "lms"
+    cmdline:
+      - '.*lms.*'
+
+  - name: "python"
+    cmdline:
+      - '.*python.*'
+
+  - name: "docker"
+    cmdline:
+      - '.*docker.*'
