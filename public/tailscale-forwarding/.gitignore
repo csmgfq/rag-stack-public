@@ -1,0 +1,5 @@
+tailscale-proxy/logs/
+tailscale-proxy/*.pid
+tailscale-proxy/socat.pids
+__pycache__/
+*.pyc
