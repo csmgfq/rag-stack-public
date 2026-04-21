@@ -1,0 +1,11 @@
+bin/
+data/
+logs/
+
+# Runtime-generated files
+*.log
+*.pid
+*.db
+
+# Keep directory structure if needed
+!.gitkeep
