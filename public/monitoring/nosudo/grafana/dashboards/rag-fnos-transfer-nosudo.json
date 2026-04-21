@@ -19,7 +19,7 @@
       },
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "PBFA97CFB590B2093"
       },
       "targets": [
         {
@@ -50,7 +50,7 @@
       },
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "PBFA97CFB590B2093"
       },
       "targets": [
         {
@@ -71,7 +71,7 @@
       },
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "PBFA97CFB590B2093"
       },
       "targets": [
         {
@@ -97,7 +97,7 @@
       },
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "PBFA97CFB590B2093"
       },
       "targets": [
         {
@@ -118,7 +118,7 @@
       },
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "PBFA97CFB590B2093"
       },
       "targets": [
         {
@@ -149,6 +149,6 @@
   "timezone": "",
   "title": "RAG FNOS 与传输监控（无 sudo）",
   "uid": "rag-fnos-transfer-nosudo",
-  "version": 2,
+  "version": 3,
   "weekStart": ""
 }
