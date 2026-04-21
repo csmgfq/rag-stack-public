@@ -24,3 +24,8 @@ bash scripts/stack_down.sh --force-stop-legacy
 - `ops/`: operational runbooks
 - `docs/`: architecture and migration docs
 - `docker-compose.yml`: reserved for optional future full dockerization
+
+## Public Upload Bundle
+
+For remote upload workflows, use the `public/` directory as the source bundle.
+It is curated to avoid local runtime files and sensitive information.

@@ -1,0 +1,3 @@
+name: backup-fnos-workflow
+version: 1
+notes: public template; fill runtime parameters externally.

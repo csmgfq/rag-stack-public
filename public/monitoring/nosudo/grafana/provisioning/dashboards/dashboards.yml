@@ -1,0 +1,11 @@
+apiVersion: 1
+
+providers:
+  - name: 'RAG NoSudo Dashboards'
+    orgId: 1
+    folder: 'RAG Monitoring'
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    options:
+      path: __ROOT__/grafana/dashboards
