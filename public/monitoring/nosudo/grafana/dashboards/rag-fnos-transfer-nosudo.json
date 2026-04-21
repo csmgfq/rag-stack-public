@@ -1,5 +1,7 @@
 {
-  "annotations": {"list": []},
+  "annotations": {
+    "list": []
+  },
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
@@ -8,54 +10,145 @@
   "panels": [
     {
       "type": "stat",
-      "title": "FNOS TCP Reachability",
-      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0},
-      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
-      "targets": [{"expr": "max(rag_fnos_tcp_up)", "refId": "A"}],
-      "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "orientation": "auto", "colorMode": "value"}
-    },
-    {
-      "type": "timeseries",
-      "title": "FNOS TCP Latency (s)",
-      "gridPos": {"h": 8, "w": 18, "x": 6, "y": 0},
-      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
-      "targets": [{"expr": "rag_fnos_tcp_latency_seconds", "legendFormat": "{{target}}", "refId": "A"}]
-    },
-    {
-      "type": "timeseries",
-      "title": "Network Bandwidth Host/Container (MiB/s)",
-      "gridPos": {"h": 9, "w": 24, "x": 0, "y": 8},
-      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "title": "FNOS TCP 可达性",
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 0
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
       "targets": [
-        {"expr": "sum by (scope) (rate(rag_network_rx_bytes_total{iface=~\"tailscale0|eth0\"}[2m])) / 1024 / 1024", "legendFormat": "{{scope}} rx", "refId": "A"},
-        {"expr": "sum by (scope) (rate(rag_network_tx_bytes_total{iface=~\"tailscale0|eth0\"}[2m])) / 1024 / 1024", "legendFormat": "{{scope}} tx", "refId": "B"}
+        {
+          "expr": "max(rag_fnos_tcp_up)",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "auto",
+        "colorMode": "value"
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "FNOS TCP 延迟（秒）",
+      "gridPos": {
+        "h": 8,
+        "w": 18,
+        "x": 6,
+        "y": 0
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "expr": "rag_fnos_tcp_latency_seconds",
+          "legendFormat": "{{target}}",
+          "refId": "A"
+        }
       ]
     },
     {
       "type": "timeseries",
-      "title": "Latest Backup Size by Scope (GiB)",
-      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 17},
-      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
-      "targets": [{"expr": "rag_backup_latest_size_bytes / 1024 / 1024 / 1024", "legendFormat": "{{scope}}", "refId": "A"}]
+      "title": "网络带宽（宿主/容器，MiB/s）",
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "expr": "sum by (scope) (rate(rag_network_rx_bytes_total{iface!~\"lo|docker0|veth.*\"}[2m])) / 1024 / 1024",
+          "legendFormat": "{{scope}} 下行",
+          "refId": "A"
+        },
+        {
+          "expr": "sum by (scope) (rate(rag_network_tx_bytes_total{iface!~\"lo|docker0|veth.*\"}[2m])) / 1024 / 1024",
+          "legendFormat": "{{scope}} 上行",
+          "refId": "B"
+        }
+      ]
     },
     {
       "type": "timeseries",
-      "title": "Backup Freshness (hours)",
-      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 17},
-      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
-      "targets": [{"expr": "(time() - rag_backup_latest_timestamp_seconds) / 3600", "legendFormat": "{{scope}}", "refId": "A"}]
+      "title": "最新备份体积（按范围，GiB）",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 17
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "expr": "rag_backup_latest_size_bytes / 1024 / 1024 / 1024",
+          "legendFormat": "{{scope}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "备份新鲜度（小时）",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 17
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "targets": [
+        {
+          "expr": "(time() - rag_backup_latest_timestamp_seconds) / 3600",
+          "legendFormat": "{{scope}}",
+          "refId": "A"
+        }
+      ]
     }
   ],
   "refresh": "15s",
   "schemaVersion": 39,
   "style": "dark",
-  "tags": ["rag", "fnos", "transfer", "tailscale"],
-  "templating": {"list": []},
-  "time": {"from": "now-6h", "to": "now"},
+  "tags": [
+    "rag",
+    "fnos",
+    "transfer",
+    "tailscale"
+  ],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
   "timepicker": {},
   "timezone": "",
-  "title": "RAG FNOS & Transfer (NoSudo)",
+  "title": "RAG FNOS 与传输监控（无 sudo）",
   "uid": "rag-fnos-transfer-nosudo",
-  "version": 1,
+  "version": 2,
   "weekStart": ""
 }
