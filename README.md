@@ -2,12 +2,14 @@
 
 一个面向本地 / 私有部署场景的最小化 RAG 基础设施模板仓库。
 
-当前内容聚焦于两部分：
+当前内容聚焦于三部分：
 
 - `qdrant/`
   - 本地向量数据库配置模板
 - `monitoring/`
   - 监控目录骨架，供后续补充 Prometheus / Grafana / exporter 配置
+- `runtime/`
+  - LM Studio 单卡运行 + 模型别名路由 + L1 缓存的可扩展运行时模板
 
 ## 设计原则
 
@@ -24,8 +26,20 @@ rag-stack-public/
 │   ├── prometheus/
 │   ├── scripts/
 │   └── textfile/
-└── qdrant/
-    └── config.yaml
+├── qdrant/
+│   └── config.yaml
+├── runtime/
+│   ├── model_profiles.json
+│   ├── launcher.py
+│   ├── router.py
+│   ├── cache.py
+│   └── config.py
+├── scripts/
+│   ├── start_single_gpu_runtime.sh
+│   ├── smoke_test_runtime.sh
+│   └── runtime_env.example
+└── tests/
+    └── test_runtime.py
 ```
 
 ## Qdrant
@@ -41,7 +55,18 @@ storage:
   storage_path: ./data/qdrant
 ```
 
-这样可以避免把用户本地绝对路径写进仓库。
+## Runtime 快速开始
+
+```bash
+cd /home/jiangzhiming/workspace/rag-stack-public
+bash scripts/start_single_gpu_runtime.sh
+```
+
+默认行为：
+
+- 以 `CUDA_VISIBLE_DEVICES=<gpu_binding>` 固定单卡。
+- 加载模型别名：`rag-main`（16K）和 `rag-fallback`（8K）。
+- 对外提供 OpenAI 兼容路由端点：`/v1/chat/completions`。
 
 ## 不会上传的内容
 
@@ -56,10 +81,6 @@ storage:
 
 ## 后续建议
 
-如果你要把这个仓库扩展成完整的可复现实验模板，可以继续补充：
-
-1. Qdrant 启动脚本
-2. Docker Compose 或 systemd 配置
-3. Prometheus 抓取配置
-4. Grafana provisioning 模板
-5. 示例数据导入脚本
+1. 增加语义缓存（L2）作为可选插件。
+2. 增加多实例路由策略（按任务路由到 `rag-fast` / `rag-longctx`）。
+3. 对接 Prometheus 指标暴露路由命中率与缓存命中率。

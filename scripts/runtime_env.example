@@ -1,0 +1,18 @@
+# Copy to scripts/runtime_env.sh and source it before starting runtime.
+
+export LMSTUDIO_BASE_URL="http://127.0.0.1:1234/v1"
+export RAG_MODEL_PROFILE_PATH="/home/jiangzhiming/workspace/rag-stack/runtime/model_profiles.json"
+
+# Fixed single-GPU binding. Change to another card index when needed.
+export RAG_GPU_BINDING="0"
+
+# Redis cache (optional). Leave empty to fallback to memory cache.
+# export REDIS_URL="redis://127.0.0.1:6379/0"
+
+export RAG_CACHE_TTL_SECONDS="21600"
+export RAG_PROMPT_VERSION="v1"
+export RAG_RETRIEVAL_VERSION="v1"
+
+# Runtime router bind
+export RAG_ROUTER_HOST="0.0.0.0"
+export RAG_ROUTER_PORT="18000"

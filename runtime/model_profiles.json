@@ -1,0 +1,33 @@
+{
+  "route_order": ["rag-main", "rag-fast", "rag-longctx", "rag-fallback"],
+  "profiles": {
+    "rag-main": {
+      "model_id": "google/gemma-4-26b-a4b",
+      "context_length": 16384,
+      "parallel": 1,
+      "gpu_binding": "0",
+      "max_tokens": 1024
+    },
+    "rag-fast": {
+      "model_id": "google/gemma-4-e4b",
+      "context_length": 8192,
+      "parallel": 2,
+      "gpu_binding": "0",
+      "max_tokens": 768
+    },
+    "rag-longctx": {
+      "model_id": "google/gemma-4-26b-a4b",
+      "context_length": 24576,
+      "parallel": 1,
+      "gpu_binding": "0",
+      "max_tokens": 1024
+    },
+    "rag-fallback": {
+      "model_id": "google/gemma-4-26b-a4b",
+      "context_length": 8192,
+      "parallel": 1,
+      "gpu_binding": "0",
+      "max_tokens": 768
+    }
+  }
+}
