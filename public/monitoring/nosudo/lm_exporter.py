@@ -14,6 +14,11 @@ LM_URL = os.environ.get("LM_URL", "http://127.0.0.1:1234/v1/models")
 RAG_ROUTER_HEALTH_URL = os.environ.get("RAG_ROUTER_HEALTH_URL", "http://100.66.142.110:18000/health")
 RAG_REACT_HEALTH_URL = os.environ.get("RAG_REACT_HEALTH_URL", "http://100.66.142.110:18001/health")
 RAG_VLLM_MODELS_URL = os.environ.get("RAG_VLLM_MODELS_URL", "http://100.66.142.110:8000/v1/models")
+RAG_ROUTER_HEALTH_FALLBACK_URL = os.environ.get("RAG_ROUTER_HEALTH_FALLBACK_URL", "http://127.0.0.1:18000/health")
+RAG_REACT_HEALTH_FALLBACK_URL = os.environ.get("RAG_REACT_HEALTH_FALLBACK_URL", "http://127.0.0.1:18001/health")
+RAG_VLLM_MODELS_FALLBACK_URL = os.environ.get("RAG_VLLM_MODELS_FALLBACK_URL", "http://127.0.0.1:8000/v1/models")
+CONTAINER_SSH = os.environ.get("LM_EXPORTER_CONTAINER_SSH", "root@127.0.0.1")
+CONTAINER_SSH_PORT = os.environ.get("LM_EXPORTER_CONTAINER_SSH_PORT", "50001")
 ACCESS_TOKEN = os.environ.get("LM_EXPORTER_TOKEN", "").strip()
 DEFAULT_BENCHMARK_METRICS_FILE = Path(__file__).resolve().parent / "data" / "benchmark_metrics.json"
 BENCHMARK_METRICS_FILE = Path(
@@ -86,6 +91,58 @@ def endpoint_up(url: str) -> int:
     return 0
 
 
+def endpoint_up_with_fallback(url: str, fallback_url: str | None = None) -> int:
+    if endpoint_up(url):
+        return 1
+    fb = (fallback_url or url).strip()
+    if not fb:
+        return 0
+    cmd = [
+        "ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=2",
+        "-p", str(CONTAINER_SSH_PORT), CONTAINER_SSH,
+        f"curl -fsS -m 3 {fb} >/dev/null",
+    ]
+    rc, _, _ = run_cmd(cmd, timeout=5)
+    return 1 if rc == 0 else 0
+
+
+def fetch_json(url: str, timeout: int = 2):
+    try:
+        with urllib.request.urlopen(url, timeout=timeout) as resp:
+            return json.load(resp)
+    except Exception:
+        return None
+
+
+def append_vllm_model_metrics(lines: list[str]):
+    lines.extend([
+        "# HELP rag_vllm_models_total Number of models exposed by vLLM /v1/models",
+        "# TYPE rag_vllm_models_total gauge",
+        "# HELP rag_vllm_model_loaded Whether model is currently loaded in vLLM (1 loaded)",
+        "# TYPE rag_vllm_model_loaded gauge",
+        "# HELP rag_vllm_model_max_model_len Maximum context length for model",
+        "# TYPE rag_vllm_model_max_model_len gauge",
+        "# HELP rag_vllm_model_created_timestamp_seconds Model create timestamp from vLLM endpoint",
+        "# TYPE rag_vllm_model_created_timestamp_seconds gauge",
+    ])
+
+    payload = fetch_vllm_models_payload()
+    models = []
+    if isinstance(payload, dict) and isinstance(payload.get("data"), list):
+        models = [m for m in payload.get("data", []) if isinstance(m, dict)]
+
+    add_metric(lines, "rag_vllm_models_total", len(models))
+
+    for model in models:
+        model_id = str(model.get("id", "")).strip()
+        if not model_id:
+            continue
+        labels = {"model": model_id}
+        add_metric(lines, "rag_vllm_model_loaded", 1, labels)
+        add_metric(lines, "rag_vllm_model_max_model_len", model.get("max_model_len"), labels)
+        add_metric(lines, "rag_vllm_model_created_timestamp_seconds", model.get("created"), labels)
+
+
 def lmstudio_up():
     for url in _candidate_lm_urls():
         try:
@@ -105,6 +162,35 @@ def process_count(name):
     except Exception:
         return 0
 
+
+def run_cmd(cmd: list[str], timeout: int = 4):
+    try:
+        p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, check=False)
+        return p.returncode, (p.stdout or "").strip(), (p.stderr or "").strip()
+    except Exception as exc:
+        return 1, "", str(exc)
+
+
+def fetch_vllm_models_payload():
+    payload = fetch_json(RAG_VLLM_MODELS_URL, timeout=2)
+    if isinstance(payload, dict) and isinstance(payload.get("data"), list):
+        return payload
+
+    cmd = [
+        "ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=2",
+        "-p", str(CONTAINER_SSH_PORT), CONTAINER_SSH,
+        "curl -sS -m 3 http://127.0.0.1:8000/v1/models",
+    ]
+    rc, out, _ = run_cmd(cmd, timeout=5)
+    if rc != 0 or not out:
+        return None
+    try:
+        payload = json.loads(out)
+        if isinstance(payload, dict) and isinstance(payload.get("data"), list):
+            return payload
+    except Exception:
+        return None
+    return None
 
 def gpu_metrics():
     metrics = []
@@ -287,15 +373,16 @@ class Handler(BaseHTTPRequestHandler):
         lines.extend([
             "# HELP rag_runtime_router_up Runtime router health (1 up, 0 down)",
             "# TYPE rag_runtime_router_up gauge",
-            f"rag_runtime_router_up {endpoint_up(RAG_ROUTER_HEALTH_URL)}",
+            f"rag_runtime_router_up {endpoint_up_with_fallback(RAG_ROUTER_HEALTH_URL, RAG_ROUTER_HEALTH_FALLBACK_URL)}",
             "# HELP rag_react_agent_up ReAct agent health (1 up, 0 down)",
             "# TYPE rag_react_agent_up gauge",
-            f"rag_react_agent_up {endpoint_up(RAG_REACT_HEALTH_URL)}",
+            f"rag_react_agent_up {endpoint_up_with_fallback(RAG_REACT_HEALTH_URL, RAG_REACT_HEALTH_FALLBACK_URL)}",
             "# HELP rag_vllm_gateway_up vLLM gateway health (1 up, 0 down)",
             "# TYPE rag_vllm_gateway_up gauge",
-            f"rag_vllm_gateway_up {endpoint_up(RAG_VLLM_MODELS_URL)}",
+            f"rag_vllm_gateway_up {endpoint_up_with_fallback(RAG_VLLM_MODELS_URL, RAG_VLLM_MODELS_FALLBACK_URL)}",
         ])
 
+        append_vllm_model_metrics(lines)
         append_benchmark_metrics(lines)
 
         body = ("\n".join(lines) + "\n").encode("utf-8")

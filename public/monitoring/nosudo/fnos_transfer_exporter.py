@@ -20,11 +20,22 @@ FNOS_MIRROR_ROOT = os.environ.get("FNOS_MIRROR_ROOT", "/vol02/1000-1-9025b335/ra
 
 CACHE = {"ts": 0.0, "text": ""}
 CACHE_TTL_SECONDS = int(os.environ.get("FNOS_EXPORTER_CACHE_TTL", "30"))
+REMOTE_SSH_TIMEOUT = int(os.environ.get("FNOS_EXPORTER_REMOTE_TIMEOUT", "1"))
+REMOTE_CONNECT_TIMEOUT = int(os.environ.get("FNOS_EXPORTER_CONNECT_TIMEOUT", "1"))
 
 
-def sh(cmd, timeout=8):
-    p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, check=False)
-    return p.returncode, p.stdout.strip(), p.stderr.strip()
+def sh(cmd, timeout=REMOTE_SSH_TIMEOUT):
+    try:
+        p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, check=False)
+        return p.returncode, p.stdout.strip(), p.stderr.strip()
+    except subprocess.TimeoutExpired as e:
+        out = (e.stdout or '').strip() if isinstance(e.stdout, str) else ''
+        err = (e.stderr or '').strip() if isinstance(e.stderr, str) else ''
+        if not err:
+            err = f"timeout after {timeout}s"
+        return 124, out, err
+    except Exception as e:
+        return 125, '', str(e)
 
 
 def labels_text(labels):
@@ -67,7 +78,7 @@ def latest_backup_stats_local(root):
 
 def latest_backup_stats_container():
     cmd = [
-        "ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5", "-p", str(CONTAINER_SSH_PORT), CONTAINER_SSH,
+        "ssh", "-o", "BatchMode=yes", "-o", f"ConnectTimeout={REMOTE_CONNECT_TIMEOUT}", "-p", str(CONTAINER_SSH_PORT), CONTAINER_SSH,
         "python3 - <<'PY'\n"
         "import json, pathlib\n"
         f"root=pathlib.Path('{CONTAINER_BACKUPS_ROOT}')\n"
@@ -91,7 +102,7 @@ def latest_backup_stats_container():
         "print(json.dumps({'ok':1,'name':latest.name,'mtime':int(latest.stat().st_mtime),'size':size,'files':files}))\n"
         "PY"
     ]
-    rc, out, _ = sh(cmd, timeout=8)
+    rc, out, _ = sh(cmd, timeout=REMOTE_SSH_TIMEOUT)
     if rc != 0 or not out:
         return None
     try:
@@ -105,8 +116,8 @@ def latest_backup_stats_container():
 
 def latest_backup_stats_fnos(path):
     cmd = [
-        "ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5", "-p", str(CONTAINER_SSH_PORT), CONTAINER_SSH,
-        f"ssh -o BatchMode=yes -o ConnectTimeout=5 admin@{FNOS_HOST} "
+        "ssh", "-o", "BatchMode=yes", "-o", f"ConnectTimeout={REMOTE_CONNECT_TIMEOUT}", "-p", str(CONTAINER_SSH_PORT), CONTAINER_SSH,
+        f"ssh -o BatchMode=yes -o PasswordAuthentication=no -o NumberOfPasswordPrompts=0 -o ConnectTimeout={REMOTE_CONNECT_TIMEOUT} admin@{FNOS_HOST} "
         f"\"python3 - <<'PY'\n"
         "import json, pathlib\n"
         f"root=pathlib.Path('{path}')\n"
@@ -130,7 +141,7 @@ def latest_backup_stats_fnos(path):
         "print(json.dumps({'ok':1,'name':latest.name,'mtime':int(latest.stat().st_mtime),'size':size,'files':files}))\n"
         "PY\""
     ]
-    rc, out, _ = sh(cmd, timeout=12)
+    rc, out, _ = sh(cmd, timeout=REMOTE_SSH_TIMEOUT)
     if rc != 0 or not out:
         return None
     try:
@@ -152,9 +163,9 @@ def net_stats_host():
 
 def net_stats_container():
     rc, out, _ = sh([
-        "ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5", "-p", str(CONTAINER_SSH_PORT), CONTAINER_SSH,
+        "ssh", "-o", "BatchMode=yes", "-o", f"ConnectTimeout={REMOTE_CONNECT_TIMEOUT}", "-p", str(CONTAINER_SSH_PORT), CONTAINER_SSH,
         "cat /proc/net/dev"
-    ], timeout=6)
+    ], timeout=REMOTE_SSH_TIMEOUT)
     if rc != 0:
         return []
     return parse_net_dev(out)
@@ -182,7 +193,7 @@ def parse_net_dev(content):
 
 def probe_fnos_tcp_from_container():
     rc, out, _ = sh([
-        "ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5", "-p", str(CONTAINER_SSH_PORT), CONTAINER_SSH,
+        "ssh", "-o", "BatchMode=yes", "-o", f"ConnectTimeout={REMOTE_CONNECT_TIMEOUT}", "-p", str(CONTAINER_SSH_PORT), CONTAINER_SSH,
         "python3 - <<'PY'\n"
         "import socket, time\n"
         f"host='{FNOS_HOST}'\n"
@@ -200,7 +211,7 @@ def probe_fnos_tcp_from_container():
         "    s.close()\n"
         "print(f'{ok} {lat}')\n"
         "PY"
-    ], timeout=8)
+    ], timeout=REMOTE_SSH_TIMEOUT)
     if rc != 0 or not out:
         return 0, 0.0
     parts = out.split()
