@@ -24,6 +24,7 @@ LONG_CONTEXT_TARGET_CHARS = int(os.environ.get("BENCH_LONG_CONTEXT_CHARS", "1200
 SHORT_MAX_TOKENS = int(os.environ.get("BENCH_SHORT_MAX_TOKENS", "192"))
 LONG_MAX_TOKENS = int(os.environ.get("BENCH_LONG_MAX_TOKENS", "192"))
 TEMPERATURE = float(os.environ.get("BENCH_TEMPERATURE", "0.1"))
+BENCH_ROUTE = os.environ.get("BENCH_ROUTE", "").strip()
 RETRIES = int(os.environ.get("BENCH_RETRIES", "2"))
 REPORT_JSON = Path(os.environ.get("BENCH_REPORT_JSON", "benchmark_report.json"))
 REPORT_MD = Path(os.environ.get("BENCH_REPORT_MD", "benchmark_report.md"))
@@ -90,6 +91,20 @@ def build_long_context(target_chars: int) -> str:
     return "\n\n".join(chunks)[:target_chars]
 
 
+
+
+def build_payload(model: str, prompt: str, max_tokens: int, temperature: float) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "model": model,
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": temperature,
+        "max_tokens": max_tokens,
+    }
+    if BENCH_ROUTE:
+        payload["route"] = BENCH_ROUTE
+    return payload
+
+
 def http_json(url: str, payload: dict[str, Any], timeout: int = 300) -> dict[str, Any]:
     req = urllib.request.Request(
         url,
@@ -107,12 +122,7 @@ def _is_retryable(err: str) -> bool:
 
 
 def chat_once(model: str, prompt: str, max_tokens: int, temperature: float, retries: int = RETRIES) -> ReqResult:
-    payload = {
-        "model": model,
-        "messages": [{"role": "user", "content": prompt}],
-        "temperature": temperature,
-        "max_tokens": max_tokens,
-    }
+    payload = build_payload(model, prompt, max_tokens, temperature)
 
     last_error: str | None = None
     last_latency = 0.0
@@ -398,6 +408,7 @@ def main() -> None:
 
     report = {
         "base_url": BASE_URL,
+        "route": BENCH_ROUTE or "default",
         "timestamp": int(time.time()),
         "long_context_target_chars": LONG_CONTEXT_TARGET_CHARS,
         "short_requests": SHORT_REQUESTS,

@@ -11,6 +11,9 @@ from urllib.parse import parse_qs, urlparse
 PORT = int(os.environ.get("LM_EXPORTER_PORT", "9401"))
 HOST = os.environ.get("LM_EXPORTER_HOST", "127.0.0.1")
 LM_URL = os.environ.get("LM_URL", "http://127.0.0.1:1234/v1/models")
+RAG_ROUTER_HEALTH_URL = os.environ.get("RAG_ROUTER_HEALTH_URL", "http://100.66.142.110:18000/health")
+RAG_REACT_HEALTH_URL = os.environ.get("RAG_REACT_HEALTH_URL", "http://100.66.142.110:18001/health")
+RAG_VLLM_MODELS_URL = os.environ.get("RAG_VLLM_MODELS_URL", "http://100.66.142.110:8000/v1/models")
 ACCESS_TOKEN = os.environ.get("LM_EXPORTER_TOKEN", "").strip()
 DEFAULT_BENCHMARK_METRICS_FILE = Path(__file__).resolve().parent / "data" / "benchmark_metrics.json"
 BENCHMARK_METRICS_FILE = Path(
@@ -71,6 +74,16 @@ def _candidate_lm_urls():
         pass
 
     return candidates
+
+
+def endpoint_up(url: str) -> int:
+    try:
+        with urllib.request.urlopen(url, timeout=2) as resp:
+            if resp.status < 400:
+                return 1
+    except Exception:
+        return 0
+    return 0
 
 
 def lmstudio_up():
@@ -270,6 +283,18 @@ class Handler(BaseHTTPRequestHandler):
             lines.append(f"rag_gpu_memory_total_mib{{gpu=\"{gpu}\"}} {mem_total_mib}")
             lines.append(f"rag_gpu_temperature_celsius{{gpu=\"{gpu}\"}} {temp}")
             lines.append(f"rag_gpu_power_watts{{gpu=\"{gpu}\"}} {power}")
+
+        lines.extend([
+            "# HELP rag_runtime_router_up Runtime router health (1 up, 0 down)",
+            "# TYPE rag_runtime_router_up gauge",
+            f"rag_runtime_router_up {endpoint_up(RAG_ROUTER_HEALTH_URL)}",
+            "# HELP rag_react_agent_up ReAct agent health (1 up, 0 down)",
+            "# TYPE rag_react_agent_up gauge",
+            f"rag_react_agent_up {endpoint_up(RAG_REACT_HEALTH_URL)}",
+            "# HELP rag_vllm_gateway_up vLLM gateway health (1 up, 0 down)",
+            "# TYPE rag_vllm_gateway_up gauge",
+            f"rag_vllm_gateway_up {endpoint_up(RAG_VLLM_MODELS_URL)}",
+        ])
 
         append_benchmark_metrics(lines)
 

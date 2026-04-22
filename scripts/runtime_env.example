@@ -15,12 +15,12 @@ export RAG_CACHE_TTL_SECONDS="21600"
 export RAG_PROMPT_VERSION="v1"
 export RAG_RETRIEVAL_VERSION="v1"
 
-# Runtime router bind
-export RAG_ROUTER_HOST="0.0.0.0"
+# Runtime router bind (loopback; expose via tailscale proxy mapping)
+export RAG_ROUTER_HOST="127.0.0.1"
 export RAG_ROUTER_PORT="18000"
 
-# ReAct agent bind
-export REACT_AGENT_HOST="0.0.0.0"
+# ReAct agent bind (loopback; expose via tailscale proxy mapping)
+export REACT_AGENT_HOST="127.0.0.1"
 export REACT_AGENT_PORT="18001"
 export RAG_KB_INDEX_PATH="/workspace/rag-stack-public/kb/processed/simple_index.json"
 
