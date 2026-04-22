@@ -377,55 +377,6 @@ def build_metrics_payload(report: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def load_existing_metrics_payload() -> dict[str, Any]:
-    if not METRICS_JSON.exists():
-        return {}
-    try:
-        data = json.loads(METRICS_JSON.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return {}
-    return data if isinstance(data, dict) else {}
-
-
-def merge_metrics_payload(existing: dict[str, Any], report: dict[str, Any]) -> dict[str, Any]:
-    current = build_metrics_payload(report)
-    merged_by_key: dict[tuple[str, str], dict[str, Any]] = {}
-
-    for entry in existing.get("scenario_metrics", []):
-        if not isinstance(entry, dict):
-            continue
-        model = entry.get("model")
-        scenario = entry.get("scenario")
-        if isinstance(model, str) and isinstance(scenario, str):
-            merged_by_key[(model, scenario)] = entry
-
-    for entry in current["scenario_metrics"]:
-        model = entry["model"]
-        scenario = entry["scenario"]
-        merged_by_key[(model, scenario)] = entry
-
-    scenario_metrics = sorted(
-        merged_by_key.values(),
-        key=lambda item: (item.get("model", ""), item.get("scenario", "")),
-    )
-    model_set = {
-        item.get("model")
-        for item in scenario_metrics
-        if isinstance(item, dict) and isinstance(item.get("model"), str)
-    }
-
-    return {
-        "timestamp": int(time.time()),
-        "base_url": report["base_url"],
-        "models_total": len(model_set),
-        "long_context_target_chars": report.get(
-            "long_context_target_chars",
-            existing.get("long_context_target_chars", LONG_CONTEXT_TARGET_CHARS),
-        ),
-        "scenario_metrics": scenario_metrics,
-    }
-
-
 def write_markdown(report: dict[str, Any]) -> None:
     lines = [
         "# LM Studio 大上下文压测报告",
@@ -469,9 +420,7 @@ def main() -> None:
 
     REPORT_JSON.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     write_markdown(report)
-    existing_metrics = load_existing_metrics_payload()
-    merged_metrics = merge_metrics_payload(existing_metrics, report)
-    METRICS_JSON.write_text(json.dumps(merged_metrics, ensure_ascii=False, indent=2), encoding="utf-8")
+    METRICS_JSON.write_text(json.dumps(build_metrics_payload(report), ensure_ascii=False, indent=2), encoding="utf-8")
 
     print("\nBenchmark finished. Reports:")
     print(f"- {REPORT_JSON}")
